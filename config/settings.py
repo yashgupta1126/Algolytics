@@ -131,5 +131,7 @@ AUTH_USER_MODEL = 'core.CustomUser'
 # Load variables from the .env file
 load_dotenv()
 
-# Store the API key in Django settings
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Production AI API Configuration Hooks
+AI_API_KEY = os.environ.get('AI_API_KEY', '')
+AI_API_URL = os.environ.get('AI_API_URL', 'https://api.groq.com/openai/v1/chat/completions')
+AI_MODEL_NAME = os.environ.get('AI_MODEL_NAME', 'llama-3.3-70b-versatile') # <-- Updated

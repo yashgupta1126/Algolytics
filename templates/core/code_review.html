@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-5">
-    <a href="{% url 'profile' %}" class="btn btn-outline-secondary mb-4">&larr; Back to Command Center</a>
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary mb-4">&larr; Back to Dashboard</a>
     
     <div class="row">
         <div class="col-lg-5 mb-4">
@@ -29,19 +29,30 @@
                     <h5 class="mb-0">✨ AI Feedback Report</h5>
                 </div>
                 <div class="card-body bg-light" style="max-height: 700px; overflow-y: auto;">
-                    {% if ai_response %}
-                        {{ ai_response|safe }}
+                    
+                    {% if review_result %}
+                        {% if reasoning_result %}
+                            <div class="p-3 mb-4 bg-white text-muted border-start border-secondary border-4 small fst-italic shadow-sm">
+                                {{ reasoning_result|safe }}
+                            </div>
+                        {% endif %}
+
+                        <div class="markdown-content p-3 bg-white shadow-sm rounded">
+                            {{ review_result|safe }}
+                        </div>
                     {% else %}
-                        <div class="text-center text-muted mt-5 pt-5">
-                            <h1 class="display-4 text-secondary mb-3">🔍</h1>
-                            <p>Paste your code and problem link to generate an instant review.</p>
+                        <div class="text-center text-muted mt-5">
+                            <p>Paste your Codeforces problem URL and source code on the left.</p>
+                            <p>The AI will scan for edge cases, logical flaws, and Big-O constraints.</p>
                         </div>
                     {% endif %}
+                    
                 </div>
             </div>
         </div>
     </div>
 </div>
+
 <script>
     // Listen for the form submission
     document.querySelector('form').addEventListener('submit', function(e) {
@@ -61,7 +72,6 @@
             btn.classList.add('disabled');
             
             // 4. Safely disable the button slightly after submit triggers
-            // This physically prevents double-clicks from sending multiple API requests
             setTimeout(() => { 
                 btn.disabled = true; 
             }, 10);

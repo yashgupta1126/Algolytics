@@ -40,9 +40,9 @@ class CodeReviewForm(forms.Form):
 class ComparisonForm(forms.Form):
     handle_1 = forms.CharField(
         label="Player 1 (Your Handle)",
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., tourist'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'CF username'})
     )
     handle_2 = forms.CharField(
         label="Player 2 (Rival Handle)",
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., Benq'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'CF username'})
     )
