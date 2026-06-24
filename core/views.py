@@ -15,58 +15,80 @@ from .forms import CustomRegistrationForm, ProfileUpdateForm, CodeReviewForm, Co
 from bs4 import BeautifulSoup
 from django.core.cache import cache
 
-# ==========================================
-# ARMORED WEB SCRAPER HELPER    
-# ==========================================
-def scrape_problem_statement(url):
+def scrape_codeforces_data(url):
     """
-    Politely fetches the exact problem description from Codeforces.
-    Utilizes caching and a global 15 Request-Per-Minute limit to prevent IP bans.
+    Fetches the problem statement AND attempts to fetch the official contest tutorial.
+    Returns a dictionary: {'problem': text, 'tutorial': text}
     """
     if "codeforces.com" not in url:
-        return "Problem description not available for non-Codeforces URLs."
+        return {"problem": "Not a Codeforces URL.", "tutorial": ""}
         
-    # DEFENSE 1: Result Caching
-    # Check if we already scraped this exact problem in the last 24 hours
-    cache_key = f"cf_problem_{url}"
-    cached_text = cache.get(cache_key)
-    if cached_text:
-        return cached_text # Return instantly. Zero network requests made!
+    cache_key = f"cf_data_{url}"
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return cached_data
 
-    # DEFENSE 2: Global Rate Limiting
-    # Track how many outbound requests the entire server has made this minute
     rate_limit_key = "cf_global_scrape_count"
     current_requests = cache.get(rate_limit_key, 0)
     
-    # If we hit 15 requests this minute, abort the scrape and use a graceful fallback
     if current_requests >= 15:
-        return "System is currently handling high Codeforces traffic volume. Falling back to blind algorithmic review."
+        return {"problem": "High traffic volume. Blind review active.", "tutorial": ""}
 
-    # Increment the global request counter and set it to reset every 60 seconds
-    cache.set(rate_limit_key, current_requests + 1, timeout=60)
+    # Increment request counter (we might make 2 requests, so add 2)
+    cache.set(rate_limit_key, current_requests + 2, timeout=60)
         
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
+    scraped_data = {"problem": "Could not fetch problem.", "tutorial": "Tutorial not available."}
+    
     try:
+        # Step 1: Fetch the Problem Page
         response = requests.get(url, headers=headers, timeout=8)
-        
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            problem_div = soup.find('div', class_='problem-statement')
+        if response.status_code != 200:
+            return scraped_data
             
-            if problem_div:
-                scraped_text = problem_div.get_text(separator='\n\n', strip=True)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Get Problem Statement
+        problem_div = soup.find('div', class_='problem-statement')
+        if problem_div:
+            scraped_data["problem"] = problem_div.get_text(separator='\n\n', strip=True)
+            
+        # Step 2: Find the Tutorial Link in the sidebar
+        tutorial_url = None
+        # Codeforces sidebar boxes have the class 'roundbox sidebox'
+        sidebar_links = soup.select('.roundbox.sidebox a')
+        for link in sidebar_links:
+            text = link.get_text(strip=True).lower()
+            if 'tutorial' in text or 'editorial' in text:
+                href = link.get('href')
+                if href and '/blog/entry/' in href:
+                    tutorial_url = href
+                    break
+                    
+        # Step 3: Fetch the Tutorial Blog
+        if tutorial_url:
+            if not tutorial_url.startswith('http'):
+                tutorial_url = f"https://codeforces.com{tutorial_url}"
                 
-                # Save the successful scrape to Django's memory for 24 hours (86,400 seconds)
-                cache.set(cache_key, scraped_text, timeout=86400)
-                
-                return scraped_text
-                
-        return "Could not fetch problem statement. Cloudflare or rate limits may be active."
+            tut_response = requests.get(tutorial_url, headers=headers, timeout=8)
+            if tut_response.status_code == 200:
+                tut_soup = BeautifulSoup(tut_response.text, 'html.parser')
+                # Codeforces blog content is stored inside 'ttypography' divs
+                blog_div = tut_soup.find('div', class_='ttypography')
+                if blog_div:
+                    # Truncate to ~15,000 characters to save AI tokens while keeping enough context
+                    scraped_data["tutorial"] = blog_div.get_text(separator='\n\n', strip=True)[:15000]
+
+        # Cache the successful scrape for 24 hours
+        cache.set(cache_key, scraped_data, timeout=86400)
+        return scraped_data
+
     except Exception as e:
-        return f"Scraping failed: {str(e)}"
+        scraped_data["problem"] = f"Scraping failed: {str(e)}"
+        return scraped_data
     
 
 # ==========================================
@@ -300,17 +322,23 @@ def ai_code_review_view(request):
             problem_link = form.cleaned_data['problem_link']
             user_code = form.cleaned_data['code']
             
-            # 1. Scrape the live problem description!
-            scraped_problem_text = scrape_problem_statement(problem_link)
+            # 1. Scrape Problem AND Tutorial
+            scraped_data = scrape_codeforces_data(problem_link)
+            problem_text = scraped_data['problem']
+            tutorial_text = scraped_data['tutorial']
             
-            # 2. Inject it directly into the prompt
+            # 2. Inject into the highly-constrained prompt
             prompt = f"""
             You are a strict Codeforces Judging Server and Elite CP Coach. 
             Analyze this C++ submission for problem: {problem_link}
             
             --- EXACT PROBLEM STATEMENT ---
-            {scraped_problem_text}
+            {problem_text}
             -------------------------------
+            
+            --- OFFICIAL CONTEST TUTORIAL (Contains all problems) ---
+            {tutorial_text}
+            ---------------------------------------------------------
             
             --- USER CODE ---
             ```cpp
@@ -319,18 +347,18 @@ def ai_code_review_view(request):
             -----------------
             
             CRITICAL INSTRUCTIONS:
-            ** You now have the exact problem statement. Read the constraints, input formats, and desired output carefully.
-            1. Always first check the code's logic througlly if it correct(Don't give false positive or false Negative)
-            2. IGNORE standard competitive programming boilerplate (`#include <bits/stdc++.h>`, `using namespace std;`, fast I/O). Focus 100% on algorithmic correctness relative to the problem statement.
-            3. If found not correct code then Actively hunt for:
-               - Integer overflow (did the problem state $N$ goes up to $10^9$? If so, did they use `long long`?).
+            1. Always first check the users code's logic througlly if it correct(Don't give false positive or false Negative)
+            2. SCAN THE TUTORIAL: The provided tutorial covers the entire contest. You must scan the text, locate the specific explanation and optimal time complexity for the exact problem statement above, and use that as your "Ground Truth".
+            3. COMPARE LOGIC: Compare the user's approach to the official tutorial approach. If  it followed some other method and matches valid approaches and getting correct answer then its correct,  If the user's logic deviates and fails to handle the constraints or edge cases mentioned in the tutorial, MARK IT AS WRONG. Do not give false positives.
+            4. IGNORE standard competitive programming boilerplate (`#include <bits/stdc++.h>`, `using namespace std;`, fast I/O). Focus 100% on algorithmic correctness.
+            5. Actively hunt for:
+               - Integer overflow (e.g., needing `long long`).
                - Array out-of-bounds or segmentation faults.
-               - Time Limit Exceeded (TLE) (Does their complexity fit the time limit?).
-            4. NEVER use backslashes to escape underscores (write `dp[i]`, not `dp\\[i\\]`).
-            5. DO NOT output a top-level title header.
-            
+               - Time Limit Exceeded (Does their complexity match the optimal tutorial complexity?).
+            6. NEVER use backslashes to escape underscores (write `dp[i]`, not `dp\\[i\\]`).
+            7. DO NOT output a top-level title header.
 
-            Format your response exactly using these sections:
+             Format your response exactly using these sections:
             
             ### 1. Algorithmic Analysis & Complexity
             Briefly state how the user's code attempts to solve the problem description. Then provide the rigorous Time and Space Complexity (e.g., $O(N \\log N)$).
@@ -345,6 +373,7 @@ def ai_code_review_view(request):
             ### 4. Optimization & Fixes
             If flawed, provide the corrected C++ logic. If correct, provide algorithmic optimizations.
             """
+
             
             content, reasoning = call_ai_engine(prompt)
             review_html = markdown.markdown(content, extensions=['fenced_code', 'tables'])
