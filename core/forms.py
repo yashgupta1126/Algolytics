@@ -18,7 +18,7 @@ class CustomRegistrationForm(UserCreationForm):
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = CustomUser
-        fields = ('email', 'codeforces_handle', 'profile_picture')
+        fields = ('email', 'codeforces_handle')
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
