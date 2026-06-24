@@ -6,12 +6,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install system compilation dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python requirements
+# Copy requirements and install (Skipping the heavy OS compilers to save RAM)
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -23,5 +18,5 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-# Start Gunicorn with a single worker thread for low memory utilization
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1"]
+# Start Gunicorn with a single worker thread and a 120-second timeout for the AI
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120"]
