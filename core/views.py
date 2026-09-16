@@ -101,7 +101,7 @@ def call_ai_engine(prompt_text):
     """
     api_key = getattr(settings, 'AI_API_KEY', '')
     api_url = getattr(settings, 'AI_API_URL', 'https://api.groq.com/openai/v1/chat/completions')
-    model_name = getattr(settings, 'AI_MODEL_NAME', 'llama-3.3-70b-versatile') # <-- Updated
+    model_name = getattr(settings, 'AI_MODEL_NAME', 'openai/gpt-oss-120b') # <-- Updated
 
     if not api_key:
         return "AI Configuration missing. Please check your system .env file.", ""

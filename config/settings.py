@@ -136,4 +136,4 @@ load_dotenv()
 # Production AI API Configuration Hooks
 AI_API_KEY = os.environ.get('AI_API_KEY', '')
 AI_API_URL = os.environ.get('AI_API_URL', 'https://api.groq.com/openai/v1/chat/completions')
-AI_MODEL_NAME = os.environ.get('AI_MODEL_NAME', 'llama-3.3-70b-versatile') # <-- Updated
+AI_MODEL_NAME = os.environ.get('AI_MODEL_NAME', 'openai/gpt-oss-120b') # <-- Updated
